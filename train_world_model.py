@@ -5,7 +5,7 @@ import torch
 from torch.utils.data import Dataset, DataLoader
 from PIL import Image
 import pytorch_lightning as pl
-from transformers import DetrForObjectDetection, DetrImageProcessor
+from transformers import RTDetrForObjectDetection, RTDetrImageProcessor
 from pytorch_lightning import Trainer
 
 # ==============================================================================
@@ -62,7 +62,8 @@ class CollateFn:
         pixel_values = [item[0] for item in batch]
         encoding = self.processor.pad(pixel_values, return_tensors="pt")
         labels = [item[1] for item in batch]
-        return {'pixel_values': encoding['pixel_values'], 'pixel_mask': encoding['pixel_mask'], 'labels': labels}
+        # RT-DETR does not use pixel_mask
+        return {'pixel_values': encoding['pixel_values'], 'labels': labels}
 
 # ==============================================================================
 # O CÉREBRO (LIGHTNING MODULE)
@@ -72,8 +73,9 @@ class DetrModel(pl.LightningModule):
         super().__init__()
         self.save_hyperparameters()
         # Carrega modelo pré-treinado, mas ajusta a cabeça final para nossas classes
-        self.model = DetrForObjectDetection.from_pretrained(
-            "facebook/detr-resnet-50",
+        # RT-DETR uses 'PekingU/rtdetr_r50vd' by default
+        self.model = RTDetrForObjectDetection.from_pretrained(
+            "PekingU/rtdetr_r50vd",
             num_labels=num_labels,
             id2label=id2label,
             label2id=label2id,
@@ -82,14 +84,13 @@ class DetrModel(pl.LightningModule):
         self.lr = learning_rate
         self.lr_backbone = lr_backbone
 
-    def forward(self, pixel_values, pixel_mask):
-        return self.model(pixel_values=pixel_values, pixel_mask=pixel_mask)
+    def forward(self, pixel_values):
+        return self.model(pixel_values=pixel_values)
 
     def common_step(self, batch, batch_idx):
         pixel_values = batch["pixel_values"]
-        pixel_mask = batch["pixel_mask"]
         labels = [{k: v.to(self.device) for k, v in t.items()} for t in batch["labels"]]
-        outputs = self.model(pixel_values=pixel_values, pixel_mask=pixel_mask, labels=labels)
+        outputs = self.model(pixel_values=pixel_values, labels=labels)
         return outputs.loss
 
     def training_step(self, batch, batch_idx):
@@ -133,8 +134,8 @@ if __name__ == "__main__":
         print(f"❌ Erro ao ler JSON: {e}")
         exit()
 
-    # 2. Prepara Processador e Dados
-    processor = DetrImageProcessor.from_pretrained("facebook/detr-resnet-50")
+    # 2. Prepara Processador e Dados (RT-DETR)
+    processor = RTDetrImageProcessor.from_pretrained("PekingU/rtdetr_r50vd")
     train_dataset = CocoDetection(img_folder=args.data, feature_extractor=processor)
     train_loader = DataLoader(train_dataset, batch_size=args.batch_size, collate_fn=CollateFn(processor), shuffle=True, num_workers=2, persistent_workers=True)
 

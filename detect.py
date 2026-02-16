@@ -2,13 +2,13 @@ import os
 import argparse
 import torch
 from PIL import Image, ImageDraw, ImageFont
-from transformers import DetrImageProcessor, DetrForObjectDetection
+from transformers import RTDetrImageProcessor, RTDetrForObjectDetection
 
 def detect_objects(model_path, image_path, threshold=0.5):
     # Carrega Modelo
     try:
-        processor = DetrImageProcessor.from_pretrained(model_path)
-        model = DetrForObjectDetection.from_pretrained(model_path)
+        processor = RTDetrImageProcessor.from_pretrained(model_path)
+        model = RTDetrForObjectDetection.from_pretrained(model_path)
     except Exception as e:
         print(f"❌ Erro ao carregar modelo: {e}")
         return
@@ -19,7 +19,8 @@ def detect_objects(model_path, image_path, threshold=0.5):
 
     # Predição
     with torch.no_grad():
-        outputs = model(**inputs)
+        # RT-DETR does not use pixel_mask
+        outputs = model(pixel_values=inputs['pixel_values'])
 
     # Pós-processamento
     target_sizes = torch.tensor([image.size[::-1]])
